@@ -1,0 +1,11 @@
+{
+  "name": "Juggy Hangar — Star Citizen Fleet & Loadout Tool",
+  "short_name": "Juggy Hangar",
+  "description": "Browse the Star Citizen fleet, optimize weapon loadouts, compare ships, and track trade routes.",
+  "start_url": "/index.html#/ships",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0e14",
+  "theme_color": "#0b0e14",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
