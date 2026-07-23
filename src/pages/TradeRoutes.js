@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { html } from "../html.js";
 import { getAllCommodityPrices, bestTrade } from "../tradeApi.js";
+import { navigate } from "../router.js";
 
 function fmt(n, digits = 0) {
   if (n == null || Number.isNaN(n)) return "—";
@@ -87,11 +88,14 @@ export function TradeRoutes() {
                     <th class="num">Profit / unit</th>
                     <th class="num">Margin</th>
                     <th class="num">Profit / ${fmt(cargoSize)} SCU</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   ${rows.map(({ commodity, trade }) => {
                     const isProfit = trade.profit > 0;
+                    const buyUuid = trade.buy.starmap_location?.uuid;
+                    const sellUuid = trade.sell.starmap_location?.uuid;
                     return html`
                       <tr key=${commodity.uuid}>
                         <td>${commodity.name}</td>
@@ -102,6 +106,9 @@ export function TradeRoutes() {
                         <td class=${`num ${isProfit ? "delta-up" : "delta-down"}`}>${fmt(trade.profit)}</td>
                         <td class=${`num ${isProfit ? "delta-up" : "delta-down"}`}>${trade.margin != null ? `${(trade.margin * 100).toFixed(0)}%` : "—"}</td>
                         <td class="num">${fmt(trade.profit * cargoSize)}</td>
+                        <td>
+                          ${buyUuid && sellUuid && html`<button class="btn" onClick=${() => navigate(`/map/${buyUuid},${sellUuid}`)}>View on Map</button>`}
+                        </td>
                       </tr>
                     `;
                   })}

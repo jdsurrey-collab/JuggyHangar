@@ -7,6 +7,9 @@ import { MyHangar } from "./pages/MyHangar.js";
 import { ImportBuild } from "./pages/ImportBuild.js";
 import { ShipCompare } from "./pages/ShipCompare.js";
 import { TradeRoutes } from "./pages/TradeRoutes.js";
+import { TierList } from "./pages/TierList.js";
+import { Mining } from "./pages/Mining.js";
+import { StarMap } from "./pages/StarMap.js";
 
 function NavLink({ to, current, children }) {
   const active = current === to || (to !== "/" && current.startsWith(to));
@@ -47,6 +50,14 @@ export function App() {
     page = html`<${PartsBrowser} />`;
   } else if (path.startsWith("/trades")) {
     page = html`<${TradeRoutes} />`;
+  } else if (path === "/tier-list") {
+    page = html`<${TierList} />`;
+  } else if (path === "/mining") {
+    page = html`<${Mining} />`;
+  } else if ((shipParams = matchRoute("/map/:highlight", path))) {
+    page = html`<${StarMap} highlight=${shipParams.highlight} />`;
+  } else if (path === "/map") {
+    page = html`<${StarMap} />`;
   } else {
     page = html`<div class="empty">Unknown route: ${path}</div>`;
   }
@@ -57,9 +68,12 @@ export function App() {
         <div class="brand">JUGGY <span>HANGAR</span></div>
         <nav>
           <${NavLink} to="/ships" current=${path}>Fleet<//>
+          <${NavLink} to="/tier-list" current=${path}>Tier List<//>
           <${NavLink} to="/compare" current=${path}>Compare<//>
           <${NavLink} to="/parts" current=${path}>Parts Catalog<//>
+          <${NavLink} to="/mining" current=${path}>Mining<//>
           <${NavLink} to="/trades" current=${path}>Trade Routes<//>
+          <${NavLink} to="/map" current=${path}>Star Map<//>
           <${NavLink} to="/hangar" current=${path}>My Hangar<//>
         </nav>
         <div class="patch">data: star-citizen.wiki (live patch)</div>

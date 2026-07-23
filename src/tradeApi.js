@@ -53,3 +53,13 @@ export function bestTrade(commodity) {
   const profit = sell.price_sell - buy.price_buy;
   return { buy, sell, profit, margin: buy.price_buy > 0 ? profit / buy.price_buy : null };
 }
+
+// Best place to sell, independent of whether the good is buyable anywhere.
+// Mined raw materials refine into goods (Quantainium, etc.) that are
+// mining-only — sellable at plenty of terminals but never purchasable from
+// one — so bestTrade()'s buy+sell requirement always returns null for them.
+export function bestSell(commodity) {
+  const sells = (commodity.uex_prices?.purchase || []).filter((p) => p.price_sell > 0);
+  if (!sells.length) return null;
+  return sells.reduce((best, p) => (p.price_sell > best.price_sell ? p : best));
+}

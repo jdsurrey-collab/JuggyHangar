@@ -230,3 +230,23 @@ export function combatRating(vehicle) {
   const speed = vehicle.speed?.scm ?? 0;
   return Math.sqrt(dps * ehp) / 50 + speed / 50;
 }
+
+const TIER_LABELS = ["S", "A", "B", "C", "D"];
+// Cumulative percentile cutoffs: top 10% is S, next 20% is A, etc.
+const TIER_CUTOFFS = [0.1, 0.3, 0.6, 0.85, 1];
+
+// Assigns a percentile-based tier (S/A/B/C/D) within a group of ships,
+// ranked by `rate` (defaults to combatRating). Percentile-based rather than
+// absolute-score-based so it always produces a readable spread regardless
+// of how the group's underlying scores are distributed.
+export function assignTiers(ships, rate = combatRating) {
+  const ranked = ships
+    .map((ship) => ({ ship, score: rate(ship) }))
+    .sort((a, b) => b.score - a.score);
+  const n = ranked.length;
+  return ranked.map((entry, i) => {
+    const percentile = (i + 1) / n;
+    const tierIndex = TIER_CUTOFFS.findIndex((cutoff) => percentile <= cutoff);
+    return { ...entry, rank: i + 1, tier: TIER_LABELS[tierIndex === -1 ? TIER_LABELS.length - 1 : tierIndex] };
+  });
+}
