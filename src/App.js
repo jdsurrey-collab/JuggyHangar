@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { html } from "./html.js";
 import { useHashRoute, matchRoute, navigate } from "./router.js";
+import { preloadEverything } from "./preload.js";
+import { SplashScreen } from "./components/SplashScreen.js";
 import { PageGrid } from "./components/PageGrid.js";
 import { Dashboard } from "./pages/Dashboard.js";
 import { ShipList } from "./pages/ShipList.js";
@@ -57,6 +59,20 @@ function GridMenuButton({ path }) {
 
 export function App() {
   const path = useHashRoute();
+  const [ready, setReady] = useState(false);
+  const [progress, setProgress] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    preloadEverything((list) => !cancelled && setProgress(list)).finally(() => !cancelled && setReady(true));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!ready) {
+    return html`<${SplashScreen} progress=${progress} />`;
+  }
 
   let page;
   let shipParams;
