@@ -29,7 +29,7 @@ async function createWindow() {
     },
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${serverHandle.port}/index.html#/ships`);
+  mainWindow.loadURL(`http://127.0.0.1:${serverHandle.port}/index.html`);
 
   // Links that would otherwise open in the app window (e.g. RSI store
   // links) open in the user's real browser instead.
