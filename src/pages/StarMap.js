@@ -21,6 +21,11 @@ function ringPositions(center, radius, count) {
   });
 }
 
+function findLocation(system, uuid) {
+  if (!system || !uuid) return null;
+  return system.allLocations.find((l) => l.uuid === uuid) || null;
+}
+
 export function StarMap({ highlight }) {
   const [locations, setLocations] = useState(null);
   const [progress, setProgress] = useState({ page: 0, total: 1 });
@@ -28,6 +33,8 @@ export function StarMap({ highlight }) {
   const [tradeProgress, setTradeProgress] = useState("");
   const [systemIndex, setSystemIndex] = useState(0);
   const [selected, setSelected] = useState(null);
+  const [view, setView] = useState("diagram");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +70,17 @@ export function StarMap({ highlight }) {
     if (idx >= 0) setSystemIndex(idx);
   }, [systems, highlightUuids]);
 
+  // All hooks must run unconditionally on every render, so this stays
+  // above the loading early-return below even though `system` (a plain
+  // derived value, not a hook) is only computed after it.
+  const currentSystem = systems[systemIndex];
+  const filteredList = useMemo(() => {
+    if (!currentSystem) return [];
+    const q = search.trim().toLowerCase();
+    const list = q ? currentSystem.allLocations.filter((l) => l.name.toLowerCase().includes(q)) : currentSystem.allLocations;
+    return list.slice().sort((a, b) => a.name.localeCompare(b.name));
+  }, [currentSystem, search]);
+
   if (!locations) {
     return html`<div class="loading">Loading starmap locations... page ${progress.page || 1} of ${progress.total}</div>`;
   }
@@ -84,10 +102,34 @@ export function StarMap({ highlight }) {
   const highlightPoints = highlightUuids.map((uuid) => pointByUuid.get(uuid)).filter(Boolean);
   const missingHighlight = highlightUuids.length > highlightPoints.length && highlightPoints.length > 0;
 
-  const selectedInfo = selected
-    ? system?.bodies.find((b) => b.uuid === selected) || system?.bodies.flatMap((b) => b.children).find((c) => c.uuid === selected)
-    : null;
+  const selectedInfo = findLocation(system, selected);
   const selectedTrades = selected ? tradeIndex.get(selected) || [] : [];
+
+  const detailPanel = html`
+    ${selectedInfo
+      ? html`
+          <section class="panel">
+            <h2>${selectedInfo.name}</h2>
+            <div class="ship-meta">${selectedInfo.type?.classification || "—"}${selectedInfo.parent ? ` · orbits ${selectedInfo.parent.name}` : ""}</div>
+            <p style=${{ fontSize: "0.85rem", color: "var(--text-dim)" }}>
+              ${(selectedInfo.description || "").split("\n")[0].slice(0, 220)}
+            </p>
+            ${selectedTrades.length > 0
+              ? html`
+                  <table>
+                    <thead><tr><th>Commodity</th><th class="num">Buy</th><th class="num">Sell</th></tr></thead>
+                    <tbody>
+                      ${selectedTrades.map(
+                        (t, i) => html`<tr key=${i}><td>${t.name}</td><td class="num">${t.buy ? fmt(t.buy) : "—"}</td><td class="num">${t.sell ? fmt(t.sell) : "—"}</td></tr>`
+                      )}
+                    </tbody>
+                  </table>
+                `
+              : html`<div class="ship-meta">No trade terminal data for this location.</div>`}
+          </section>
+        `
+      : html`<div class="empty">Click a body, station, or list row to see details and what's traded there.</div>`}
+  `;
 
   return html`
     <div>
@@ -99,6 +141,9 @@ export function StarMap({ highlight }) {
             </button>
           `
         )}
+        <span style=${{ width: "1px", background: "var(--border)", alignSelf: "stretch" }}></span>
+        <button class=${`btn ${view === "diagram" ? "active" : ""}`} onClick=${() => setView("diagram")}>Diagram</button>
+        <button class=${`btn ${view === "list" ? "active" : ""}`} onClick=${() => setView("list")}>List</button>
         ${tradeProgress && html`<span class="ship-meta">${tradeProgress}</span>`}
       </div>
 
@@ -107,86 +152,104 @@ export function StarMap({ highlight }) {
         One of the highlighted trade locations is in a different system — switch tabs to see it.
       </div>`}
 
-      <div style=${{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
-        <svg
-          viewBox=${`0 0 ${WIDTH} ${HEIGHT}`}
-          style=${{ width: "100%", maxWidth: "640px", background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: "8px" }}
-        >
-          ${highlightPoints.length === 2 &&
-          html`<line
-            x1=${highlightPoints[0].x} y1=${highlightPoints[0].y}
-            x2=${highlightPoints[1].x} y2=${highlightPoints[1].y}
-            stroke="var(--accent-2)" stroke-width="2" stroke-dasharray="6,6"
-          />`}
+      ${system?.star?.description &&
+      html`<p style=${{ color: "var(--text-dim)", marginTop: 0 }}>${system.star.description}</p>`}
 
-          <circle cx=${CENTER.x} cy=${CENTER.y} r="18" fill="#f5d76e" />
-          <text x=${CENTER.x} y=${CENTER.y + 34} text-anchor="middle" fill="var(--text)" font-size="13">${system?.starName || ""}</text>
+      ${view === "diagram"
+        ? html`
+            <div style=${{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+              <svg
+                viewBox=${`0 0 ${WIDTH} ${HEIGHT}`}
+                style=${{ width: "100%", maxWidth: "640px", background: "var(--bg-panel)", border: "1px solid var(--border)", borderRadius: "8px" }}
+              >
+                ${highlightPoints.length === 2 &&
+                html`<line
+                  x1=${highlightPoints[0].x} y1=${highlightPoints[0].y}
+                  x2=${highlightPoints[1].x} y2=${highlightPoints[1].y}
+                  stroke="var(--accent-2)" stroke-width="2" stroke-dasharray="6,6"
+                />`}
 
-          ${system?.bodies.map((body, i) => {
-            const pos = bodyPositions[i];
-            const isHighlighted = highlightUuids.includes(body.uuid);
-            const childPositions = ringPositions(pos, CHILD_RADIUS, Math.max(body.children.length, 1));
-            return html`
-              <g key=${body.uuid}>
-                <line x1=${CENTER.x} y1=${CENTER.y} x2=${pos.x} y2=${pos.y} stroke="var(--border)" stroke-width="1" />
                 <circle
-                  cx=${pos.x} cy=${pos.y} r=${isHighlighted ? 14 : 10}
-                  fill=${isHighlighted ? "var(--accent-2)" : "var(--accent)"}
-                  style=${{ cursor: "pointer" }}
-                  onClick=${() => setSelected(body.uuid)}
+                  cx=${CENTER.x} cy=${CENTER.y} r="18" fill="#f5d76e"
+                  style=${{ cursor: system?.star ? "pointer" : "default" }}
+                  onClick=${() => system?.star && setSelected(system.star.uuid)}
                 />
-                <text x=${pos.x} y=${pos.y - 16} text-anchor="middle" fill="var(--text)" font-size="12">${body.name}</text>
-                ${body.children.map((child, j) => {
-                  const cpos = childPositions[j];
-                  const childHighlighted = highlightUuids.includes(child.uuid);
+                <text x=${CENTER.x} y=${CENTER.y + 34} text-anchor="middle" fill="var(--text)" font-size="13">${system?.starName || ""}</text>
+
+                ${system?.bodies.map((body, i) => {
+                  const pos = bodyPositions[i];
+                  const isHighlighted = highlightUuids.includes(body.uuid);
+                  const childPositions = ringPositions(pos, CHILD_RADIUS, Math.max(body.children.length, 1));
                   return html`
-                    <g key=${child.uuid}>
-                      <line x1=${pos.x} y1=${pos.y} x2=${cpos.x} y2=${cpos.y} stroke="var(--border)" stroke-width="1" />
+                    <g key=${body.uuid}>
+                      <line x1=${CENTER.x} y1=${CENTER.y} x2=${pos.x} y2=${pos.y} stroke="var(--border)" stroke-width="1" />
                       <circle
-                        cx=${cpos.x} cy=${cpos.y} r=${childHighlighted ? 8 : 5}
-                        fill=${childHighlighted ? "var(--accent-2)" : "var(--text-dim)"}
+                        cx=${pos.x} cy=${pos.y} r=${isHighlighted ? 14 : 10}
+                        fill=${isHighlighted ? "var(--accent-2)" : "var(--accent)"}
                         style=${{ cursor: "pointer" }}
-                        onClick=${() => setSelected(child.uuid)}
+                        onClick=${() => setSelected(body.uuid)}
                       />
+                      <text x=${pos.x} y=${pos.y - 16} text-anchor="middle" fill="var(--text)" font-size="12">${body.name}</text>
+                      ${body.children.map((child, j) => {
+                        const cpos = childPositions[j];
+                        const childHighlighted = highlightUuids.includes(child.uuid);
+                        return html`
+                          <g key=${child.uuid}>
+                            <line x1=${pos.x} y1=${pos.y} x2=${cpos.x} y2=${cpos.y} stroke="var(--border)" stroke-width="1" />
+                            <circle
+                              cx=${cpos.x} cy=${cpos.y} r=${childHighlighted ? 8 : 5}
+                              fill=${childHighlighted ? "var(--accent-2)" : "var(--text-dim)"}
+                              style=${{ cursor: "pointer" }}
+                              onClick=${() => setSelected(child.uuid)}
+                            />
+                          </g>
+                        `;
+                      })}
                     </g>
                   `;
                 })}
-              </g>
-            `;
-          })}
-        </svg>
+              </svg>
 
-        <div style=${{ flex: "1", minWidth: "260px" }}>
-          ${selectedInfo
-            ? html`
-                <section class="panel">
-                  <h2>${selectedInfo.name}</h2>
-                  <div class="ship-meta">${selectedInfo.type?.classification || "—"}</div>
-                  <p style=${{ fontSize: "0.85rem", color: "var(--text-dim)" }}>
-                    ${(selectedInfo.description || "").split("\n")[0].slice(0, 220)}
-                  </p>
-                  ${selectedTrades.length > 0
-                    ? html`
-                        <table>
-                          <thead><tr><th>Commodity</th><th class="num">Buy</th><th class="num">Sell</th></tr></thead>
-                          <tbody>
-                            ${selectedTrades.map(
-                              (t, i) => html`<tr key=${i}><td>${t.name}</td><td class="num">${t.buy ? fmt(t.buy) : "—"}</td><td class="num">${t.sell ? fmt(t.sell) : "—"}</td></tr>`
-                            )}
-                          </tbody>
-                        </table>
+              <div style=${{ flex: "1", minWidth: "260px" }}>${detailPanel}</div>
+            </div>
+          `
+        : html`
+            <div style=${{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+              <div style=${{ flex: "2", minWidth: "320px" }}>
+                <div class="toolbar">
+                  <input type="text" placeholder="Search this system..." value=${search} onInput=${(e) => setSearch(e.target.value)} />
+                  <span class="pill">${filteredList.length} locations</span>
+                </div>
+                <table>
+                  <thead>
+                    <tr><th>Name</th><th>Type</th><th>Orbits</th></tr>
+                  </thead>
+                  <tbody>
+                    ${filteredList.map(
+                      (loc) => html`
+                        <tr
+                          key=${loc.uuid}
+                          style=${{ cursor: "pointer", background: selected === loc.uuid ? "var(--bg-panel-alt)" : undefined }}
+                          onClick=${() => setSelected(loc.uuid)}
+                        >
+                          <td>${loc.name}</td>
+                          <td>${loc.type?.classification || "—"}</td>
+                          <td>${loc.parent?.name || "—"}</td>
+                        </tr>
                       `
-                    : html`<div class="ship-meta">No trade terminal data for this location.</div>`}
-                </section>
-              `
-            : html`<div class="empty">Click a body or station to see details and what's traded there.</div>`}
-        </div>
-      </div>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div style=${{ flex: "1", minWidth: "260px" }}>${detailPanel}</div>
+            </div>
+          `}
 
       <div class="footer-note">
         This is a schematic diagram, not a to-scale map — the API has no real coordinates, so bodies are arranged
         evenly around their star/planet rather than at accurate distances. Outposts and asteroid fields are hidden to
-        keep the diagram readable.
+        keep the diagram readable. Every name, description, and relationship shown here comes live from
+        star-citizen.wiki, so it updates automatically with each game patch.
       </div>
     </div>
   `;

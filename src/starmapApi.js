@@ -8,8 +8,11 @@ export async function getLocations(onProgress) {
 // (star at center, bodies ranked around it, their own satellites ranked
 // around them), not a to-scale map. Outposts/asteroids are excluded; there
 // are thousands of them and including them would bury the handful of major
-// bodies and trade hubs that actually matter here.
-const MAP_CLASSIFICATIONS = new Set(["Planet", "Moon", "Manmade", "Settlement"]);
+// bodies and trade hubs that actually matter here. "Star" is included so
+// the star itself carries its own live description through to the detail
+// panel/list, same as everything else — nothing about a system is
+// hardcoded, it all comes from these location records.
+const MAP_CLASSIFICATIONS = new Set(["Star", "Planet", "Moon", "Manmade", "Settlement"]);
 
 export function buildSystemMap(locations) {
   const visible = locations.filter(
@@ -30,20 +33,28 @@ export function buildSystemMap(locations) {
   const systems = [];
   for (const [name, locs] of bySystem) {
     const byUuid = new Map(locs.map((l) => [l.uuid, l]));
-    const topLevel = locs.filter((l) => !l.parent || !byUuid.has(l.parent.uuid));
+    const star = locs.find((l) => l.type?.classification === "Star") || null;
+    const nonStar = locs.filter((l) => l !== star);
+    const topLevel = nonStar.filter((l) => !l.parent || !byUuid.has(l.parent.uuid) || l.parent.uuid === star?.uuid);
     const childrenByParent = new Map();
-    for (const l of locs) {
-      if (l.parent && byUuid.has(l.parent.uuid)) {
+    for (const l of nonStar) {
+      if (l.parent && byUuid.has(l.parent.uuid) && l.parent.uuid !== star?.uuid) {
         if (!childrenByParent.has(l.parent.uuid)) childrenByParent.set(l.parent.uuid, []);
         childrenByParent.get(l.parent.uuid).push(l);
       }
     }
+    const bodies = topLevel
+      .map((body) => ({ ...body, children: childrenByParent.get(body.uuid) || [] }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     systems.push({
       name,
-      starName: locs[0]?.star?.name || name,
-      bodies: topLevel
-        .map((body) => ({ ...body, children: childrenByParent.get(body.uuid) || [] }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
+      star,
+      starName: star?.name || locs[0]?.star?.name || name,
+      bodies,
+      // Flat list of every node in the system (star + bodies + their
+      // children) for the List view — same underlying records, just
+      // unrolled instead of nested.
+      allLocations: [star, ...bodies.flatMap((b) => [b, ...b.children])].filter(Boolean),
     });
   }
   return systems.sort((a, b) => b.bodies.length - a.bodies.length);
